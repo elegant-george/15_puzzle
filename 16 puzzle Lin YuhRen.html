@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      html {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+      }
+
+      .title {
+        margin-top: 20vh;
+      }
+
+      .puzzle {
+        background: #929597;
+        width: 300px;
+        border-radius: 5px;
+        box-shadow: 0 5px 30px -5px rgba(0, 0, 0, 0.295);
+        border-radius: 15px;
+        position: relative;
+        margin-top: 30px;
+      }
+
+      .puzzle-display {
+        background: #f9f9fb;
+        color: #5f6972;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        border-radius: 10px 10px 0 0;
+        max-width: 100%;
+      }
+
+      .puzzle-display h1 {
+        margin: 0;
+        padding: 25px;
+        font-size: 55px;
+        font-weight: 100;
+        overflow-x: auto;
+      }
+
+      /* Buttons */
+      #puzzle-buttons {
+        display: grid;
+        grid-gap: 12px;
+        grid-template-columns: repeat(4, 1fr);
+        padding: 10px;
+      }
+
+      .button-panel {
+        margin-top: 30px;
+        margin-bottom: 30px;
+      }
+
+      button {
+        min-height: 50px;
+        font-size: 20px;
+        font-weight: 100;
+        border: none;
+        background: #f3f5f7;
+        color: #64879e;
+        border-radius: 9px;
+        cursor: pointer;
+        box-shadow: 2px 2px 7px 1px rgba(187, 187, 187, 0.171);
+        border: solid white 0.5px;
+      }
+
+      button:hover {
+        filter: brightness(110%);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      button:focus {
+        outline: none;
+      }
+
+      .functionality {
+        border-width: 3px;
+        border-color:#a9b2b9;
+      }
+
+      #dummysp {
+        visibility: hidden;
+      }
+
+      .modal {
+        position: fixed;
+        width: 100vw;
+        height: 100vh;
+        z-index: 20;
+        top: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.7);
+      }
+      .modal-container {
+        position: relative;
+        top:-1rem;
+        text-align: center;
+      }
+
+      #modal-two {
+        background: rgba(255,255,255,0.3);
+        z-index: 10;
+      }
+
+      .auto-solving {
+        margin-bottom: 8%;
+        color:rgba(43, 43, 43, 0.8);
+      }
+
+      .close {
+        display: none;
+      }
+      
+    </style>
+    <title>16 puzzle</title>
+</head>
+<body>
+  <div>
+    <h1 class="title">16 PUZZLE</h1>
+    <div class="puzzle">
+      <div id="puzzle-buttons">
+      </div>
+    </div>
+    <div class="button-panel">
+      <button class="functionality" onclick="location.reload()">change</button>
+      <button class="functionality" onclick="backToStart()">back to start</button>
+    </div>
+    <button class="functionality" onclick="autoSolve()">auto solve</button>
+  </div>
+  <div class="modal close" id="modal-one">
+    <div class="modal-container">
+      <h1>Congratulation!</h1>
+      <h2>You solved it!</h2>
+      <button class="functionality" onclick="location.reload()">restart</button>
+    </div>
+  </div>
+  <div class="modal close" id="modal-two">
+    <h2 class="auto-solving">auto solving ...</h2>
+  </div>
+  <script>
+
+    // Although the question ask to write the script in <head> tag,
+    // I write the script in <body> tag because my script has to
+    // get html element. That is more convinent to write script in <head> tag.
+    // I am very sorry.
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    class Puzzle {
+      constructor(shuffleTimes=1000) {
+        this.solutionArray = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 'sp'];
+        this.nowArray = [...this.solutionArray];
+        this.shuffleTimes=shuffleTimes;
+        this.startArray;
+        this.isLocking=false;
+      }
+      turnOnLock() {
+        this.isLocking = true;
+      }
+      get spIndex() {
+        return this.nowArray.indexOf('sp')
+      }
+      get spRowCol() {
+        return this.numRowCol('sp')
+      }
+      numIndex(num) {
+        return this.nowArray.indexOf(num)
+      }
+      numRowCol(num){
+        // return coordinate of num
+        const row = Math.floor(this.nowArray.indexOf(num) / 4);
+        const col = this.nowArray.indexOf(num) % 4;
+        return [row, col]
+      }
+      get nowStatus() {
+        return this.nowArray
+      }
+      get startStatus() {
+        return this.startArray
+      }
+      get whoCanMove() {
+        let canMoveArray = [];
+        if (!this.isAtRightmost('sp')) {canMoveArray.push(this.spIndex + 1)};
+        if (!this.isAtLeftmost('sp')) {canMoveArray.push(this.spIndex - 1)};
+        if (!this.isAtBottom('sp')) {canMoveArray.push(this.spIndex + 4)};
+        if (!this.isAtTop('sp')) {canMoveArray.push(this.spIndex - 4)};
+        return canMoveArray;
+    };
+      initialize() {
+        // using while to avoid solved at start and set counter to avoid miracle (always true while)
+        let dummy = 0;
+        while(JSON.stringify(this.nowArray)==JSON.stringify(this.solutionArray) && dummy < 1000){
+          this.shuffle(this.shuffleTimes);
+          while(!this.isAtRightmost('sp')) {this.spMoveRight()};
+          while(!this.isAtBottom('sp')) {this.spMoveDown()}
+          dummy++;
+        };
+        this.startArray = [...this.nowArray];
+      }
+      shuffle(times) {
+        for (let i = 0; i < times; i++) {
+          const random = Math.floor(Math.random() * this.whoCanMove.length);
+          const moveIndex = this.whoCanMove[random];
+          this.spMove(moveIndex);
+        };
+      }
+      backToStart() {
+        this.nowArray = [...this.startArray];
+      }
+      isAtTop(num) {
+        return Math.floor(this.nowArray.indexOf(num) / 4) === 0
+      }
+      isAtBottom(num) {
+        return Math.floor(this.nowArray.indexOf(num) / 4) === 3
+      }
+      isAtLeftmost(num) {
+        return (this.nowArray.indexOf(num) % 4) === 0
+      }
+      isAtRightmost(num) {
+        return (this.nowArray.indexOf(num) % 4) === 3
+      }
+      spMove(moveIndex) {
+        [this.nowArray[this.spIndex], this.nowArray[moveIndex]] = [this.nowArray[moveIndex], 'sp'];
+      }
+      spMoveRight() {
+        if(!this.isAtRightmost('sp')) this.spMove(this.spIndex + 1);
+      };
+      spMoveLeft() {
+        if(!this.isAtLeftmost('sp')) this.spMove(this.spIndex - 1);
+      };
+      spMoveUp() {
+        if(!this.isAtTop('sp')) this.spMove(this.spIndex - 4);
+      };
+      spMoveDown() {
+        if(!this.isAtBottom('sp')) this.spMove(this.spIndex + 4);
+      };
+    }
+    const puzzle = new Puzzle();
+    puzzle.initialize();
+
+    const puzzleButtonsEl = document.getElementById('puzzle-buttons');
+    updateDOM(puzzle.nowStatus);
+
+    function removeAllChildNodes(parent) {
+      while (parent.firstChild) {
+          parent.removeChild(parent.firstChild);
+      };
+    };
+
+    function createItemEl(item) {
+      const buttonEl = document.createElement('button');
+      buttonEl.textContent = item;
+      buttonEl.id = `dummy${item}`;
+      buttonEl.setAttribute('onclick', `tryMove(${item})`);
+      puzzleButtonsEl.appendChild(buttonEl);
+    };
+
+    function updateDOM() {
+      removeAllChildNodes(puzzleButtonsEl);
+
+      puzzle.nowStatus.forEach((buttonItem) => {
+        createItemEl(buttonItem);
+      });
+      if (JSON.stringify(puzzle.nowStatus)==JSON.stringify(puzzle.solutionArray)) {
+        puzzle.turnOnLock();
+        document.getElementById('modal-one').classList.remove('close');
+      };
+    };
+
+    function tryMove(num) {
+      puzzle.whoCanMove.includes(puzzle.numIndex(num))
+      if (puzzle.whoCanMove.includes(puzzle.numIndex(num))) {
+        puzzle.spMove(puzzle.numIndex(num));
+        updateDOM();    
+      }
+    };
+
+    function backToStart() {
+      puzzle.backToStart();
+      updateDOM();
+    };
+
+    // using cursor keys to control
+    document.addEventListener('keyup', (e) => {
+      if (!puzzle.isLocking) {
+        if(e.code === "ArrowDown" && !puzzle.isAtTop('sp')) puzzle.spMoveUp();
+        else if (e.code === "ArrowUp" && !puzzle.isAtBottom('sp')) puzzle.spMoveDown();
+        else if(e.code === "ArrowLeft" && !puzzle.isAtRightmost('sp')) puzzle.spMoveRight();
+        else if(e.code === "ArrowRight" && !puzzle.isAtLeftmost('sp')) puzzle.spMoveLeft();
+        updateDOM();
+      }
+    });
+
+
+    //  0  1  2  3
+    //  4  5  6  7
+    //  8  9 10 11
+    // 12 13 14 15
+    // we first solve index 0, 1, 2, 3, and then 4, 8, 12,
+    // and then 5, 6, 7, and then 9, 13, and then 10, 11, 14, 15
+
+    async function solverSpMove(direction) {
+      // 'u' = up, 'd' = down, 'l' = left, 'r' = right
+      await sleep(150);
+      if (direction === 'u') puzzle.spMoveUp();
+      else if (direction === 'd') puzzle.spMoveDown();
+      else if (direction === 'l') puzzle.spMoveLeft();
+      else if (direction === 'r') puzzle.spMoveRight();
+      updateDOM();    
+    }
+
+    async function numMoveRight(num, circleDir='cw') {
+      // circleDir, direction of sp circle
+      const pNumIndex = puzzle.numIndex(num);
+      let dummy = 0;
+      while (puzzle.numIndex(num) !== pNumIndex + 1 && !puzzle.isAtRightmost(num) && dummy < 20) {
+        dummy++
+        if (circleDir === 'cw') {
+          if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex - 1 - 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex + 1 - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('l');
+        }
+        else if (circleDir === 'ccw') {
+          if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex - 1 + 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex + 1 + 4) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('l');
+        };
+      }
+    };
+
+    async function numMoveLeft(num, circleDir='ccw') {
+      // circleDir, direction of sp circle
+      const pNumIndex = puzzle.numIndex(num);
+      let dummy = 0;
+      while (puzzle.numIndex(num) !== pNumIndex - 1 && !puzzle.isAtLeftmost(num) && dummy < 20) {
+        dummy++
+        if (circleDir === 'ccw') {
+          if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex - 1 - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 1 - 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('u');
+        }
+        else if (circleDir === 'cw') {
+          if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex - 1 + 4) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 1 + 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('d');
+        };
+      }
+    };
+
+    async function numMoveUp(num, circleDir='cw') {
+      // circleDir, direction of sp circle
+      const pNumIndex = puzzle.numIndex(num);
+      let dummy = 0;
+      while (puzzle.numIndex(num) !== pNumIndex - 4 && !puzzle.isAtTop(num) && dummy < 20)  {
+        dummy++
+        if (circleDir === 'ccw') {
+          if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex + 1 - 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex + 1 + 4) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('r');
+        }
+        else if (circleDir === 'cw') {
+          if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex - 1 - 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex - 1 + 4) await solverSpMove('u');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('l');
+        };
+      }
+    };
+
+    async function numMoveDown(num, circleDir='ccw') {
+      // circleDir, direction of sp circle
+      const pNumIndex = puzzle.numIndex(num);
+      let dummy = 0;
+      while (puzzle.numIndex(num) !== pNumIndex + 4 && !puzzle.isAtBottom(num) && dummy < 20) {
+        dummy++
+        if (circleDir === 'cw') {
+          if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex + 1 - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex + 1) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex + 1 + 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('u');
+        }
+        else if (circleDir === 'ccw') {
+          if (puzzle.spIndex === pNumIndex - 4) await solverSpMove('l');
+          else if (puzzle.spIndex === pNumIndex - 1 - 4) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex - 1) await solverSpMove('d');
+          else if (puzzle.spIndex === pNumIndex - 1 + 4) await solverSpMove('r');
+          else if (puzzle.spIndex === pNumIndex + 4) await solverSpMove('u');
+        };
+      }
+    };
+
+    async function resetSpIndex(row, col) {
+      const [spRow, spCol] = puzzle.spRowCol;
+      for (let i=0; i<spRow-row; i++) await solverSpMove('u');
+      for (let i=0; i<spCol-col; i++) await solverSpMove('l');
+    };
+
+    async function setSpIndex(row, col) {
+      const [spRow, spCol] = puzzle.spRowCol;
+      for (let i=0; i<row-spRow; i++) await solverSpMove('d');
+      for (let i=0; i<col-spCol; i++) await solverSpMove('r');
+    };
+
+    async function numMoveRowCol(row, col, num, lockCol=undefined) {
+      await setSpIndex(row, col);
+      const [numRow, numCol] = puzzle.numRowCol(num);
+      const [spRow, spCol] = puzzle.spRowCol;
+      if (numRow === row) {
+        for (let i=0; i<spCol-numCol-1; i++) await solverSpMove('l'); // move sp right to number
+        for (let i=0; i<col-numCol; i++) await numMoveRight(num, 'cw'); // move number to rightmost
+      } else {
+        // move sp under number
+        for (let i=0; i<spRow-numRow-1; i++) await solverSpMove('u');
+        for (let i=0; i<spCol-numCol; i++) await solverSpMove('l');
+        // move number to row 
+        for (let i=0; i<row-numRow; i++) {
+          if (puzzle.isAtLeftmost(num) || numCol === lockCol + 1) await numMoveDown(num, 'cw');
+          else await numMoveDown(num, 'ccw');
+        }
+        // move number to rightmost
+        for (let i=0; i<col-numCol; i++) await numMoveRight(num, 'cw');
+      };
+    };
+
+    async function handleBottom (num, lockCol=undefined) {
+      if (puzzle.isAtBottom(num)) {
+        const[row, col] = puzzle.numRowCol(num);
+        const[spRow, spCol] = puzzle.spRowCol;
+        for (let i=0; i<spCol-col; i++) await solverSpMove('l'); // move sp upper to number 
+        for (let i=0; i<2; i++) {
+          if (puzzle.isAtLeftmost(num) || col === lockCol + 1) await numMoveUp(num, 'ccw');
+          else await numMoveUp(num, 'cw');
+        }
+      };
+    };
+
+    async function handleRightmost (num, lockRow=undefined) {
+      if (puzzle.isAtRightmost(num)) {
+        const[row, col] = puzzle.numRowCol(num);
+        const[spRow, spCol] = puzzle.spRowCol;
+        for (let i=0; i<spRow-row; i++) await solverSpMove('u'); // move sp left to number 
+        for (let i=0; i<2; i++) {
+          if (puzzle.isAtTop(num) || row === lockRow + 1) await numMoveLeft(num, 'cw');
+          else await numMoveLeft(num, 'ccw');
+        }
+      };
+    };
+
+    async function sovlerSpCircle(row, col) {
+      // move sp roundly, from origin to origin + col, origin + col + row,
+      // to origin + row, origin
+      for (let i=0; i<col; i++) await solverSpMove('r');
+      for (let i=0; i<row; i++) await solverSpMove('d');
+      for (let i=0; i<col; i++) await solverSpMove('l');
+      for (let i=0; i<row; i++) await solverSpMove('u');
+    }
+
+    async function solver () {
+      // move number 2 to index 15
+      await numMoveRowCol(3, 3, 2);
+
+      // move number 1 to index 11
+      await resetSpIndex(0, 0);
+      await setSpIndex(2, 2);
+      await handleBottom(1);
+      await resetSpIndex(0, 0);
+      await numMoveRowCol(2, 3, 1);
+
+      // move number 3 to index 14
+      await resetSpIndex(0, 0);
+      await setSpIndex(2, 2);
+      await handleRightmost(3);
+      await resetSpIndex(0, 0);
+      await numMoveRowCol(3, 2, 3);
+      
+      // move number 4 to index 10
+      await resetSpIndex(0, 0);
+      await setSpIndex(2, 2);
+      await handleBottom(4);
+      await resetSpIndex(0, 0);
+      await setSpIndex(2, 2);
+      await handleRightmost(4);
+      await resetSpIndex(0, 0);
+      await numMoveRowCol(2, 2, 4);
+
+      // solve number 1,2,3,4
+      await resetSpIndex(0,0);
+      for (let i=0; i<3; i++) await solverSpMove('r');
+      for (let i=0; i<3; i++) await solverSpMove('d');
+      await solverSpMove('l');await solverSpMove('u');
+      await resetSpIndex(0, 0);
+      for (let i=0; i<4; i++) await sovlerSpCircle(3, 3);
+      await solverSpMove('d');
+
+      // move number 9 to index 15
+      await resetSpIndex(1, 0);
+      await numMoveRowCol(3, 3, 9);
+
+      // move number 5 to index 14
+      await resetSpIndex(1, 0);
+      await setSpIndex(2, 2);
+      await handleRightmost(5, 0);
+      await resetSpIndex(1, 0);
+      await numMoveRowCol(3, 2, 5);
+      
+      // move number 13 to index 11
+      await resetSpIndex(1, 0);
+      await setSpIndex(2, 2);
+      await handleBottom(13);
+      await resetSpIndex(1, 0);
+      await numMoveRowCol(2, 3, 13);
+
+      // solve number 5, 9, 13
+      await resetSpIndex(1, 0);
+      for (let i=0; i<5; i++) await sovlerSpCircle(2, 3);
+      await solverSpMove('r');
+
+      // move number 7 to index 15;
+      await numMoveRowCol(3, 3, 7, 0);
+
+      // move number 6 to index 11
+      await resetSpIndex(1, 1);
+      await setSpIndex(2, 2);
+      await handleBottom(6, 0);
+      await resetSpIndex(1, 1);
+      await numMoveRowCol(2, 3, 6, 0);
+
+      // move number 8 to index 14
+      await resetSpIndex(1, 1);
+      if (puzzle.numIndex(8) === 7) {
+        await solverSpMove('r');await solverSpMove('r');await solverSpMove('d');
+        await solverSpMove('l');await solverSpMove('u');await solverSpMove('l');
+        await solverSpMove('d');await solverSpMove('r');await solverSpMove('r');
+        await solverSpMove('u');
+      };
+      await resetSpIndex(1, 1);
+      await numMoveRowCol(3, 2, 8, 0);
+
+      // solve number 6, 7, 8
+      await resetSpIndex(1, 1);
+      for (let i=0; i<3; i++) await sovlerSpCircle(2, 2);
+      await solverSpMove('d');
+
+      // move number 14 to index 15
+      await numMoveRowCol(3, 3, 14, 0);
+
+      // move number 10 to index 14
+      await resetSpIndex(2, 1);
+      if (puzzle.numIndex(10) === 11) {
+        await solverSpMove('r');await solverSpMove('r');await solverSpMove('d');
+        await solverSpMove('l');await solverSpMove('u');await solverSpMove('l');
+        await solverSpMove('d');await solverSpMove('r');await solverSpMove('r');
+        await solverSpMove('u');
+        await solverSpMove('r')
+      };
+      await resetSpIndex(2, 1);
+      await numMoveRowCol(3, 2, 10, 0);
+
+      // solve number 10, 14
+      await resetSpIndex(2, 1);
+      for (let i=0; i<3; i++) await sovlerSpCircle(1, 2);
+      await solverSpMove('r');
+
+      // solve number 11, 12, 15
+      await setSpIndex(3, 3);
+      let dummy = 0;
+      while(!(puzzle.numIndex(11) === 10 && puzzle.numIndex(12) === 11 && puzzle.numIndex(15) === 14) && dummy < 10){
+        await resetSpIndex(2, 2);
+        await setSpIndex(3, 3);
+        dummy++
+      };
+    };
+
+    async function autoSolve () {
+      document.getElementById('modal-two').classList.remove('close');
+      puzzle.turnOnLock();
+      await solver();
+      document.getElementById('modal-two').classList.add('close');
+
+    };
+
+  </script>
+</body>
+</html>
